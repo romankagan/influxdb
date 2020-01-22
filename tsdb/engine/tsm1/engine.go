@@ -1893,8 +1893,22 @@ func (e *Engine) WriteSnapshot() (err error) {
 // CreateSnapshot will create a temp directory that holds
 // temporary hardlinks to the underylyng shard files.
 func (e *Engine) CreateSnapshot() (string, error) {
-	if err := e.WriteSnapshot(); err != nil {
-		return "", err
+	var err error
+	for i := 0; i < 3; i++ {
+		err = e.WriteSnapshot()
+		if err != nil {
+			switch err {
+			case ErrSnapshotInProgress:
+				backoff := time.Duration(math.Pow(32, float64(i))) * time.Millisecond
+				time.Sleep(backoff)
+			default:
+				return "", err
+			}
+		}
+	}
+
+	if err != nil {
+		e.logger.Info("Cache busy: Backup proceeding without the cache contents", zap.Error(err))
 	}
 
 	e.mu.RLock()
